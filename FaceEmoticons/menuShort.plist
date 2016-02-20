@@ -10,12 +10,6 @@
 	</dict>
 	<dict>
 		<key>title</key>
-		<string>Top </string>
-		<key>cat</key>
-		<string>https://store.line.me/stickershop/showcase/top_creators/en?page=%d</string>
-	</dict>
-	<dict>
-		<key>title</key>
 		<string>Entertainment</string>
 		<key>cat</key>
 		<string>https://store.line.me/stickershop/showcase/new/en?page=%d&amp;category=8</string>
