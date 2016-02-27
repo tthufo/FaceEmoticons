@@ -42,6 +42,8 @@
 
 #define kAvatar [UIImage imageNamed:@"facemo"]
 
+#define kColor @"#E14FA4"
+
 #define kStartAppId @"201229868"
 
 #define kStartAppDev @"101179665"
@@ -70,6 +72,6 @@
 
 #import "EM_MenuView.h"
 
-#import "StartAds.h"
+#import "Ads.h"
 
 #endif /* PrefixHeader_pch */

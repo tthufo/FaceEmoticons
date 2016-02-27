@@ -10,9 +10,7 @@
 
 #import "TFHpple.h"
 
-#import "XMLReader.h"
-
-#define BANNER_TYPE kBanner_Portrait_Bottom
+#import "DropButton.h"
 
 #define ratio 0.5
 
@@ -21,7 +19,7 @@
 @interface EM_First_ViewController ()<UITableViewDataSource, UITableViewDelegate>
 
 {
-    NSMutableArray * dataList, * menuList, * sideMenuList;
+    NSMutableArray * dataList, * menuList, * optionList, * sideMenuList, * multiImages, * uri;
     
     int count;
     
@@ -33,6 +31,8 @@
     
     IBOutlet UIButton * cover;
     
+    IBOutlet UIView * buttonView;
+    
     UIImage * tempImage;
     
     UIImageView * preview;
@@ -40,6 +40,8 @@
     BOOL isShort;
     
     CGRect start;
+    
+    ASIFormDataRequest * request;
 }
 
 @end
@@ -69,12 +71,16 @@
     UIBarButtonItem * menuB = [[UIBarButtonItem alloc] initWithImage:[UIImage imageNamed:@"menu"] style:UIBarButtonItemStylePlain target:self action:@selector(didPressMenu)];
     self.navigationItem.leftBarButtonItem = menuB;
     
-    UIBarButtonItem * share = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAction target:self action:@selector(didPressShare)];
+    UIBarButtonItem * share = [[UIBarButtonItem alloc] initWithImage:[UIImage imageNamed:@"setting"] style:UIBarButtonItemStylePlain target:self action:@selector(didPressShare)];
     self.navigationItem.rightBarButtonItem = share;
     
     [collectionView registerNib:[UINib nibWithNibName:@"EM_Cells" bundle:nil] forCellWithReuseIdentifier:@"imageCell"];
     
     dataList = [NSMutableArray new];
+    
+    multiImages = [NSMutableArray new];
+    
+    uri = [NSMutableArray new];
     
     sideMenuList = [[NSMutableArray alloc] initWithArray:@[@"Save",@"Copy",@"Share",@"Close"]];
     
@@ -86,76 +92,395 @@
         
     }];
     
+    collectionView.contentInset = UIEdgeInsetsMake(0, 0, 50, 0);
+    
     menu = [self returnView];
     
     sideMenu = [self returnSideMenu];
     
-    [[LTRequest sharedInstance] didRequestInfo:@{@"absoluteLink":@"https://dl.dropboxusercontent.com/s/b8kx3kzha96x8tw/Facemoticon.plist",@"overrideError":@(1),@"overrideLoading":@(1),@"host":self} withCache:^(NSString *cacheString) {
+    self.title = @"";
+    
+    [[LTRequest sharedInstance] didRequestInfo:@{@"absoluteLink":@"https://dl.dropboxusercontent.com/s/5m8wjpwpp4i60pl/Facemoticon1_1.plist",@"overrideError":@(1),@"overrideLoading":@(1),@"host":self} withCache:^(NSString *cacheString) {
     } andCompletion:^(NSString *responseString, NSError *error, BOOL isValidated) {
+        
+        if(!isValidated)
+        {
+            return ;
+        }
         
         NSData *data = [responseString dataUsingEncoding:NSUTF8StringEncoding];
         NSError * er = nil;
-        NSDictionary *dict = [XMLReader dictionaryForXMLData:data
+        NSDictionary *dict = [self returnDictionary:[XMLReader dictionaryForXMLData:data
                                                      options:XMLReaderOptionsProcessNamespaces
-                                                       error:&er];
+                                                       error:&er]];
         
-        NSMutableDictionary * option = [[XMLReader recursionRemoveTextNode:dict] mutableCopy];
+        [System addValue:@{@"banner":dict[@"banner"],@"fullBanner":dict[@"fullBanner"],@"adsMob":dict[@"ads"]} andKey:@"adsInfo"];
         
-        [self didPrepareData:[option[@"plist"][@"dict"][@"key"] boolValue]];
+        isShort = [dict[@"show"] boolValue];
         
-        isShort = [option[@"plist"][@"dict"][@"key"] boolValue];
+        [self didPrepareData:isShort];
         
+        [self didPrepareButtonView];
+        
+        [self didSelectMultiMode];
+        
+        [self didRequestData];
+        
+        BOOL isUpdate = [dict[@"version"] compare:[self appInfor][@"majorVersion"] options:NSNumericSearch] == NSOrderedDescending;
+        
+        if(isUpdate)
+        {
+            [[DropAlert shareInstance] alertWithInfor:@{/*@"option":@(0),@"text":@"wwww",*/@"cancel":@"Close",@"buttons":@[@"Download now"],@"title":@"New Update",@"message":dict[@"update_message"]} andCompletion:^(int indexButton, id object) {
+                switch (indexButton)
+                {
+                    case 0:
+                    {
+                        if([[UIApplication sharedApplication] canOpenURL:[NSURL URLWithString:dict[@"url"]]])
+                        {
+                            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:dict[@"url"]]];
+                        }
+                    }
+                        break;
+                    case 1:
+                        
+                        break;
+                    default:
+                        break;
+                }
+            }];
+        }
+        [self didShowAdsBanner];
     }];
     
     cover.frame = CGRectMake(0, 0, screenWidth, screenHeight);
     
     preview = [self returnImage:CGRectMake(15, (screenHeight - (screenWidth - (screenWidth * sideRatio)) - 30) / 2 - 15 , (screenWidth - (screenWidth * sideRatio)) - 30 , (screenWidth - (screenWidth * sideRatio)) - 30)];
-    
-    [[StartAds sharedInstance] didShowBannerAdsWithInfor:@{@"host":self,@"Y":@(screenHeight - 64 - 50)} andCompletion:^(BannerEvent event, NSError *error, id bannerAd) {
-        switch (event)
+}
+
+- (void)didShowAdsBanner
+{
+    if([[self infoPlist][@"showAds"] boolValue])
+    {
+        if([[System getValue:@"adsInfo"][@"adsMob"] boolValue] && [System getValue:@"adsInfo"][@"banner"])
         {
-            case AdsDone:
-            {
-                collectionView.contentInset = UIEdgeInsetsMake(0, 0, 50, 0);
-            }
-                break;
-            case AdsFailed:
-            {
-                collectionView.contentInset = UIEdgeInsetsMake(0, 0, 0, 0);
-            }
-                break;
-            case AdsWillPresent:
-            {
+            [[Ads sharedInstance] G_didShowBannerAdsWithInfor:@{@"host":self,@"X":@(320),@"Y":@(screenHeight - 64 - 50),@"adsId":[System getValue:@"adsInfo"][@"banner"]/*,@"device":@""*/} andCompletion:^(BannerEvent event, NSError *error, id banner) {
                 
-            }
-                break;
-            case AdsWillLeave:
-            {
-                
-            }
-                break;
-            default:
-                break;
+                switch (event)
+                {
+                    case AdsDone:
+                        
+                        break;
+                    case AdsFailed:
+                        
+                        break;
+                    default:
+                        break;
+                }
+            }];
         }
+    }
+    if([[self infoPlist][@"showAds"] boolValue])
+    {
+        if(![[System getValue:@"adsInfo"][@"adsMob"] boolValue])
+        {
+            [[Ads sharedInstance] S_didShowBannerAdsWithInfor:@{@"host":self,@"Y":@(screenHeight - 64 - 50)} andCompletion:^(BannerEvent event, NSError *error, id bannerAd) {
+                switch (event)
+                {
+                    case AdsDone:
+                    {
+                        
+                    }
+                        break;
+                    case AdsFailed:
+                    {
+                        
+                    }
+                        break;
+                    case AdsWillPresent:
+                    {
+                        
+                    }
+                        break;
+                    case AdsWillLeave:
+                    {
+                        
+                    }
+                        break;
+                    default:
+                        break;
+                }
+            }];
+        }
+    }
+}
+
+- (void)didSelectMultiMode
+{
+    if(buttonView.frame.origin.y == screenHeight && ![[System getValue:@"s_option"] boolValue])
+        return;
+    
+    [UIView animateWithDuration:0.3 animations:^{
+        
+        CGRect rect = buttonView.frame;
+        
+        rect.origin.y += ![[System getValue:@"s_option"] boolValue] ? 94 + 64 : - 94 - 64;
+        
+        buttonView.frame = rect;
+        
+        collectionView.contentInset = UIEdgeInsetsMake(0, 0,![[System getValue:@"s_option"] boolValue] ? 50 : 100, 0);
+        
     }];
+    
+    [self showToast:[[System getValue:@"s_option"] boolValue] ? @"Multi selection" : @"Single selection" andPos:0];
+}
+
+- (void)didPrepareButtonView
+{
+    buttonView.frame = CGRectMake(0, screenHeight , screenWidth, 44);
+    
+    UIButton * save = [UIButton buttonWithType:UIButtonTypeCustom];
+    save.tag = 1;
+    [save setTitle:@"Save" forState:UIControlStateNormal];
+    save.font = [UIFont boldSystemFontOfSize:17];
+    save.backgroundColor = [AVHexColor colorWithHexString:kColor];
+    [save withBorder:@{@"Bcorner":@(0),@"Bwidth": @(1),@"Bhex": @"#FFFFFF"}];
+    save.frame = CGRectMake(0, 0, screenWidth / 2 - 1, buttonView.frame.size.height);
+    [save addTarget:self action:@selector(didPressButtonView:) forControlEvents:UIControlEventTouchUpInside];
+    [buttonView addSubview:save];
+    
+    UIButton * copy = [UIButton buttonWithType:UIButtonTypeCustom];
+    copy.tag = 2;
+    [copy setTitle:@"Copy" forState:UIControlStateNormal];
+    copy.font = [UIFont boldSystemFontOfSize:17];
+    copy.backgroundColor = [AVHexColor colorWithHexString:kColor];
+    [copy withBorder:@{@"Bcorner":@(0),@"Bwidth": @(1),@"Bhex": @"#FFFFFF"}];
+    copy.frame = CGRectMake(screenWidth / 2 + 1, 0, screenWidth / 2 - 1, buttonView.frame.size.height);
+    [copy addTarget:self action:@selector(didPressButtonView:) forControlEvents:UIControlEventTouchUpInside];
+    [buttonView addSubview:copy];
+    
+    [self.view addSubview:buttonView];
+}
+
+- (void)didPressButtonView:(UIButton*)sender
+{
+    NSMutableArray * index = [NSMutableArray new];
+    
+    [uri removeAllObjects];
+    
+    for(NSDictionary * dict in dataList)
+    {
+        if([dict[@"isSelected"] boolValue])
+        {
+            NSString *key = [[SDWebImageManager sharedManager] cacheKeyForURL:[NSURL URLWithString:dict[@"image"]]];
+            
+            UIImage *lastPreviousCachedImage = [[SDImageCache sharedImageCache] imageFromDiskCacheForKey:key];
+            
+            if(lastPreviousCachedImage)
+            {
+                [index addObject:lastPreviousCachedImage];
+                
+                [uri addObject:dict[@"image"]];
+            }
+        }
+    }
+    if(sender.tag == 1)
+    {
+        if(index.count == 0)
+        {
+            [self showToast:@"You did not select any photo" andPos:0];
+            
+            return;
+        }
+        
+        [multiImages removeAllObjects];
+        
+        [multiImages addObjectsFromArray:index];
+        
+        [self saveNextWallpaper];
+        
+        [self showSVHUD:@"Saving" andOption:0];
+        
+        if(![self getValue:@"save"])
+        {
+            [self addValue:@"1" andKey:@"save"];
+        }
+        else
+        {
+            int k = [[self getValue:@"save"] intValue] + 1 ;
+            
+            [self addValue:[NSString stringWithFormat:@"%i", k] andKey:@"save"];
+        }
+        
+        if([[self getValue:@"save"] intValue] % 3 == 0)
+        {
+            [self performSelector:@selector(showAds) withObject:nil afterDelay:0.5];
+        }
+    }
+    else
+    {
+        UIPasteboard *appPasteBoard = [UIPasteboard generalPasteboard];
+        
+        appPasteBoard.persistent = YES;
+        
+        [appPasteBoard setImages:index];
+        
+        NSArray * total = [dataList filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"isSelected = 1"]];
+        
+        [self showToast:[NSString stringWithFormat:@"%lu photo(s) copied",(unsigned long)total.count] andPos:0];
+        
+        if(![self getValue:@"copy"])
+        {
+            [self addValue:@"1" andKey:@"copy"];
+        }
+        else
+        {
+            int k = [[self getValue:@"copy"] intValue] + 1 ;
+            
+            [self addValue:[NSString stringWithFormat:@"%i", k] andKey:@"copy"];
+        }
+        
+        if([[self getValue:@"copy"] intValue] % 5 == 0)
+        {
+            [self performSelector:@selector(showAds) withObject:nil afterDelay:0.5];
+        }
+    }
+}
+
+- (void)saveNextWallpaper
+{
+    if (multiImages && multiImages.count > 0)
+    {
+        UIImageWriteToSavedPhotosAlbum([multiImages lastObject], self, @selector(image:didFinishSavingImagesWithError:contextInfo:), (__bridge void * _Nullable)([uri lastObject]));
+        [multiImages removeLastObject];
+        [uri removeLastObject];
+    }
+}
+
+- (void)image:(UIImage *)image didFinishSavingImagesWithError:(NSError *)error contextInfo:(void *)contextInfo
+{
+    if (error != NULL)
+    {
+        [self showSVHUD:@"Photo(s) not saved, please check for Gallery permission in Settings" andOption:2];
+    }
+    else
+    {
+        [System addValue:(__bridge NSString*)contextInfo andKey:(__bridge NSString*)contextInfo];
+        
+        [collectionView reloadData];
+        
+        if (multiImages)
+        {
+            [self saveNextWallpaper];
+            
+            if (multiImages.count == 0)
+            {
+                [self hideSVHUD];
+                
+                NSArray * total = [dataList filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"isSelected = 1"]];
+                
+                [self showToast:[NSString stringWithFormat:@"%i photo(s) saved",total.count] andPos:0];
+            }
+        }
+    }
+}
+
+
+- (NSDictionary*)returnDictionary:(NSDictionary*)dict
+{
+    NSMutableDictionary * result = [NSMutableDictionary new];
+    
+    for(NSDictionary * key in dict[@"plist"][@"dict"][@"key"])
+    {
+        result[key[@"jacknode"]] = dict[@"plist"][@"dict"][@"string"][[dict[@"plist"][@"dict"][@"key"] indexOfObject:key]][@"jacknode"];
+    }
+    
+    return result;
 }
 
 - (void)didPrepareData:(BOOL)isShow
 {
+    if(![System getValue:@"s_option"])
+    {
+        [System addValue:@(0) andKey:@"s_option"];
+    }
+    
     self.title = [NSArray arrayWithContentsOfPlist:isShow ? @"menu" : @"menuShort"][0][@"title"];
 
     url = [NSArray arrayWithContentsOfPlist:isShow ? @"menu" : @"menuShort"][0][@"cat"];
     
     menuList = [[NSMutableArray alloc] initWithArray:[NSArray arrayWithContentsOfPlist:isShow ? @"menu" : @"menuShort"]];
     
+    optionList = [@[@{@"title": ![[System getValue:@"s_option"] boolValue] ? @"Multi selection" : @"Single selection"}, @{@"title":@"Tell your friend"}] mutableCopy];
+    
     [self didRequestData];
 }
 
 - (void)didPressShare
 {
-    [[FB shareInstance] startShareWithInfo:@[@"Plenty of emotion stickers for your message and chatting, have fun!",@"https://itunes.apple.com/us/developer/thanh-hai-tran/id1073174100",[UIImage imageNamed:@"facemo"]] andBase:nil andRoot:self andCompletion:^(NSString *responseString, id object, int errorCode, NSString *description, NSError *error) {
+    DropButton * sender = [DropButton shareInstance];
+    
+    sender.pList = @"options";
+    
+    [sender didDropDownWithData:optionList andInfo:@{@"rect":[NSValue valueWithCGRect:CGRectMake(screenWidth - 150, -34, 150, 100)]} andCompletion:^(id object) {
+        
+        switch ([object[@"index"] intValue]) {
+            case 0:
+            {
+                [System addValue:[[System getValue:@"s_option"] boolValue] ? @(0) : @(1) andKey:@"s_option"];
+                [optionList removeAllObjects];
+                optionList = [@[@{@"title": ![[System getValue:@"s_option"] boolValue] ? @"Multi selection" : @"Single selection"}, @{@"title":@"Tell your friend"}] mutableCopy];
+                
+                if(![[System getValue:@"s_option"] boolValue])
+                {
+                    [self showToast:@"Single selection" andPos:0];
+                }
+                else
+                {
+                    [self showToast:@"Mutil selection" andPos:0];
+                }
+                
+                if(dataList.count != 0 && [[System getValue:@"s_option"] boolValue])
+                {
+                    for(NSMutableDictionary * dict in dataList)
+                    {
+                        if(![dict responseForKey:@"isSelected"])
+                            dict[@"isSelected"] = @(0);
+                    }
+                }
+                
+                [self didSelectMultiMode];
+                
+                [collectionView reloadData];
+            }
+                break;
+            case 1:
+            {
+                [[FB shareInstance] startShareWithInfo:@[@"Plenty of emotion stickers for your message and chatting, have fun!",@"https://itunes.apple.com/us/developer/thanh-hai-tran/id1073174100",[UIImage imageNamed:@"facemo"]] andBase:nil andRoot:self andCompletion:^(NSString *responseString, id object, int errorCode, NSString *description, NSError *error) {
+                    
+                }];
+            }
+                break;
+            default:
+                break;
+        }
         
     }];
+    
+    if(![self getValue:@"share"])
+    {
+        [self addValue:@"1" andKey:@"share"];
+    }
+    else
+    {
+        int k = [[self getValue:@"share"] intValue] + 1 ;
+        
+        [self addValue:[NSString stringWithFormat:@"%i", k] andKey:@"share"];
+    }
+    
+    if([[self getValue:@"share"] intValue] % 8 == 0)
+    {
+        [self performSelector:@selector(showAds) withObject:nil afterDelay:0.5];
+    }
 }
 
 - (IBAction)didPressCover:(id)sender
@@ -281,71 +606,60 @@
     [self didRequestData];
 }
 
-- (void)didRequestData
+- (void)didReceiveData:(NSString*)data andIsReset:(BOOL)isReset
 {
-    [self showSVHUD:@"Loading" andOption:0];
-
     if(count == 1)
-    {
         [dataList removeAllObjects];
-    }
     
-    NSURL * requestUrl = [NSURL URLWithString:[NSString stringWithFormat:url, count]];
+    TFHpple *parser = [TFHpple hppleWithHTMLData:[data dataUsingEncoding:NSUTF8StringEncoding]];
     
-    NSString * cc = [NSString stringWithFormat:@"%i",count + 100];
+    NSString *pathQuery = !isShort ? [self.title isEqualToString:@"Fun"] ? @"//div[@class='sticker-icons-container']" : @"//div[@class='mdCMN05Img']/img" : @"//div[@class='sticker-icons-container']";
     
-    dispatch_queue_t imageQueue = dispatch_queue_create([cc UTF8String],NULL);
+    NSArray *nodes = [parser searchWithXPathQuery:pathQuery];
     
-    dispatch_async(imageQueue, ^{
-        
-        NSError* error = nil;
-        
-        NSData* htmlData = [NSData dataWithContentsOfURL:requestUrl options:NSDataReadingUncached error:&error];
-        
-//        NSLog(@"%@",[NSString stringWithUTF8String:[htmlData bytes]]);
-        
-        TFHpple *parser = [TFHpple hppleWithHTMLData:htmlData];
-        
-        NSString *pathQuery = !isShort ? [self.title isEqualToString:@"Fun"] ? @"//div[@class='sticker-icons-container']" : @"//div[@class='mdCMN05Img']/img" : @"//div[@class='sticker-icons-container']";
-        
-//        NSString *pathQuery = @"//div[@class='sticker-icons-container']";
-        
-        NSArray *nodes = [parser searchWithXPathQuery:pathQuery];
-        
-        for (TFHppleElement *element in nodes)
+    for (TFHppleElement *element in nodes)
+    {
+        if(!element.hasChildren)
         {
-            if(!element.hasChildren)
+            [dataList addObject:[@{@"image":[[element objectForKey:@"src"] stringByReplacingOccurrencesOfString:@"https" withString:@"http"]} mutableCopy]];
+            continue;
+        }
+
+        for(TFHppleElement *child in element.children)
+        {
+            for(TFHppleElement * c in child.children)
             {
-                [dataList addObject:@{@"image":[element objectForKey:@"src"]}];
-                continue;
-            }
-            
-            for(TFHppleElement *child in element.children)
-            {
-                for(TFHppleElement * c in child.children)
+                if([c objectForKey:@"src"])
                 {
-                    if([c objectForKey:@"src"])
-                    {
-                        [dataList addObject:@{@"image":[c objectForKey:@"src"]}];
-                    }
+                    [dataList addObject:[@{@"image":[[c objectForKey:@"src"] stringByReplacingOccurrencesOfString:@"https" withString:@"http"]} mutableCopy]];
                 }
             }
         }
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            
-            [collectionView reloadData];
-            
-            [collectionView footerEndRefreshing];
-            
-            [self hideSVHUD];
+    }
 
-            if(count == 1)
-                
-                [collectionView setContentOffset:CGPointZero animated:NO];
+    
+    [collectionView reloadData];
+    
+    [collectionView footerEndRefreshing];
+    
+    if(isReset)
+        [collectionView setContentOffset:CGPointZero animated:NO];
+}
+
+- (void)didRequestData
+{
+    NSString * requestUrl = [NSString stringWithFormat:url, count];
+    
+    [[LTRequest sharedInstance] didInitWithUrl:@{@"absoluteLink":requestUrl/*,@"overrideError":@(1)*/,@"host":self} withCache:^(NSString *cacheString) {
+        
+        [self didReceiveData:cacheString andIsReset:YES];
+        
+    } andCompletion:^(NSString *responseString, NSError *error, BOOL isValidated) {
+        
+        if(!error)
             
-        });
-    });
+            [self didReceiveData:responseString andIsReset:NO];
+    }];
 }
 
 - (NSInteger)tableView:(UITableView *)_tableView numberOfRowsInSection:(NSInteger)section
@@ -405,6 +719,10 @@
     
     if(_tableView.tag == 11)
     {
+        [request cancel];
+        
+        [request clearDelegatesAndCancel];
+        
         if([menuList[indexPath.row][@"title"] isEqualToString:self.title])
         {
             [self didPressMenu];
@@ -430,21 +748,43 @@
         {
             case 0:
             {
-                UIImageWriteToSavedPhotosAlbum(tempImage,self, @selector(image:didFinishSavingWithError:contextInfo:), (__bridge void * _Nullable)(dataList[[tempIndexPath intValue]][@"image"]));
+                if(tempImage)
+                {
+                   UIImageWriteToSavedPhotosAlbum(tempImage,self, @selector(image:didFinishSavingWithError:contextInfo:), (__bridge void * _Nullable)(dataList[[tempIndexPath intValue]][@"image"]));
+                }
+                else
+                {
+                    [self alert:@"Attention" message:@"Image can't be saved, please try again"];
+                }
+                
             }
                 break;
             case 1:
             {
-                UIPasteboard *appPasteBoard = [UIPasteboard generalPasteboard];
-                appPasteBoard.persistent = YES;
-                [appPasteBoard setImage:tempImage];
+                if(tempImage)
+                {
+                    UIPasteboard *appPasteBoard = [UIPasteboard generalPasteboard];
+                    appPasteBoard.persistent = YES;
+                    [appPasteBoard setImage:tempImage];
+                }
+                else
+                {
+                    [self alert:@"Attention" message:@"Image can't be copied, please try again"];
+                }
             }
                 break;
             case 2:
             {
-                [[FB shareInstance] startShareWithInfo:@[@"Plenty of emotion stickers for your message and chatting, have fun!", @"https://itunes.apple.com/us/developer/thanh-hai-tran/id1073174100", tempImage] andBase:nil andRoot:self andCompletion:^(NSString *responseString, id object, int errorCode, NSString *description, NSError *error) {
+                if(tempImage)
+                {
+                    [[FB shareInstance] startShareWithInfo:@[@"Plenty of emotion stickers for your message and chatting, have fun!", @"https://itunes.apple.com/us/developer/thanh-hai-tran/id1073174100", tempImage] andBase:nil andRoot:self andCompletion:^(NSString *responseString, id object, int errorCode, NSString *description, NSError *error) {
 
-                    }];
+                        }];
+                }
+                else
+                {
+                    [self alert:@"Attention" message:@"Image can't be shared, please try again"];
+                }
             }
                 break;
                 case 3:
@@ -494,9 +834,22 @@
 {
     UICollectionViewCell *cell = [cv dequeueReusableCellWithReuseIdentifier:@"imageCell" forIndexPath:indexPath];
     
-    [((UIImageView*)[self withView:cell tag:11]) sd_setImageWithURL:[NSURL URLWithString:dataList[indexPath.item][@"image"]] placeholderImage:nil completed:^(UIImage *image, NSError *error, SDImageCacheType cacheType, NSURL *imageURL) {
-        
+    [((UIImageView*)[self withView:cell tag:11]) sd_setImageWithURL:[NSURL URLWithString:[((NSString*)dataList[indexPath.item][@"image"]) encodeUrl]] placeholderImage:nil completed:^(UIImage *image, NSError *error, SDImageCacheType cacheType, NSURL *imageURL) {
+        if (error) return;
+        if (image && cacheType == SDImageCacheTypeNone)
+        {
+            [UIView transitionWithView:((UIImageView*)[self withView:cell tag:11])
+                              duration:0.5
+                               options:UIViewAnimationOptionTransitionFlipFromTop
+                            animations:^{
+                                [((UIImageView*)[self withView:cell tag:11]) setImage:image];
+                            } completion:NULL];
+        }
     }];
+    
+    ((UIView*)[self withView:cell tag:16]).hidden = ![[System getValue:@"s_option"] boolValue];
+    
+    ((UIView*)[self withView:cell tag:16]).alpha = [dataList[indexPath.item][@"isSelected"] boolValue] ? 0 : 0.5 ;
     
     [((UIImageView*)[self withView:cell tag:11]) withBorder:@{@"Bcorner":@(0),@"Bwidth": indexPath.item % 2 != 0 ? @(1.5) : @(0),@"Bhex": indexPath.item % 2 != 0 ? @"#4BABE4" : @"#FFFFFF"}];
     
@@ -529,6 +882,15 @@
 
 - (void)collectionView:(UICollectionView *)_collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath
 {
+    if([[System getValue:@"s_option"] boolValue])
+    {
+        dataList[indexPath.item][@"isSelected"] = [dataList[indexPath.item][@"isSelected"] boolValue] ? @(0) : @(1);
+        
+        [collectionView reloadData];
+        
+        return;
+    }
+    
     NSURL *imageURL = [NSURL URLWithString:dataList[indexPath.item][@"image"]];
     
     NSData *imageData = [NSData dataWithContentsOfURL:imageURL];
@@ -554,33 +916,59 @@
 
 - (void)showAds
 {
-    [[StartAds sharedInstance] didShowFullAdsWithInfor:@{} andCompletion:^(BannerEvent event, NSError *error, id bannerAd) {
-        switch (event)
+    if([[self infoPlist][@"showAds"] boolValue])
+    {
+        if(![[System getValue:@"adsInfo"][@"adsMob"] boolValue])
         {
-            case AdsDone:
-            {
-                
-            }
-                break;
-            case AdsFailed:
-            {
-                
-            }
-                break;
-            case AdsWillPresent:
-            {
-                
-            }
-                break;
-            case AdsWillLeave:
-            {
-                
-            }
-                break;
-            default:
-                break;
+            [[Ads sharedInstance] S_didShowFullAdsWithInfor:@{} andCompletion:^(BannerEvent event, NSError *error, id bannerAd) {
+                switch (event)
+                {
+                    case AdsDone:
+                    {
+                        
+                    }
+                        break;
+                    case AdsFailed:
+                    {
+                        
+                    }
+                        break;
+                    case AdsWillPresent:
+                    {
+                        
+                    }
+                        break;
+                    case AdsWillLeave:
+                    {
+                        
+                    }
+                        break;
+                    default:
+                        break;
+                }
+            }];
         }
-    }];
+        else
+        {
+            if([System getValue:@"adsInfo"][@"fullBanner"])
+            {
+                [[Ads sharedInstance] G_didShowFullAdsWithInfor:@{@"host":self,@"adsId":[System getValue:@"adsInfo"][@"fullBanner"]/*,@"device":@""*/} andCompletion:^(BannerEvent event, NSError *error, id banner) {
+                    
+                    switch (event)
+                    {
+                        case AdsDone:
+                            
+                            break;
+                        case AdsFailed:
+                            
+                            break;
+                        default:
+                            break;
+                    }
+                }];
+            }
+        }
+    }
 }
 
 - (void)image:(UIImage *)image didFinishSavingWithError:(NSError *)error contextInfo:(void *)contextInfo
@@ -638,6 +1026,7 @@
                              preview = [self returnImage:CGRectMake(15, (screenHeight - (screenWidth - (screenWidth * sideRatio)) - 30) / 2 - 15 , (screenWidth - (screenWidth * sideRatio)) - 30 , (screenWidth - (screenWidth * sideRatio)) - 30)];
                          }
                          self.navigationItem.leftBarButtonItem.enabled = !back;
+                         self.navigationItem.rightBarButtonItem.enabled = !back;
                      }];
 }
 

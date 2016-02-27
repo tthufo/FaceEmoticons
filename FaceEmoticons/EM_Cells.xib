@@ -17,6 +17,10 @@
                     <imageView userInteractionEnabled="NO" tag="11" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="kD5-ku-Ao4">
                         <rect key="frame" x="0.0" y="0.0" width="103" height="97"/>
                     </imageView>
+                    <view alpha="0.5" tag="16" contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="uf7-Oc-0Sf">
+                        <rect key="frame" x="0.0" y="0.0" width="103" height="97"/>
+                        <color key="backgroundColor" white="0.0" alpha="1" colorSpace="calibratedWhite"/>
+                    </view>
                     <imageView userInteractionEnabled="NO" tag="12" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="check" translatesAutoresizingMaskIntoConstraints="NO" id="6mu-rE-BAn">
                         <rect key="frame" x="78" y="1" width="24" height="24"/>
                         <constraints>
@@ -31,10 +35,14 @@
                 <constraint firstItem="kD5-ku-Ao4" firstAttribute="top" secondItem="N0G-V2-5R4" secondAttribute="top" id="1Jm-ih-wd1"/>
                 <constraint firstAttribute="trailing" secondItem="kD5-ku-Ao4" secondAttribute="trailing" id="1XN-Dx-t7M"/>
                 <constraint firstAttribute="bottom" secondItem="kD5-ku-Ao4" secondAttribute="bottom" id="9ff-n1-i8z"/>
+                <constraint firstAttribute="bottom" secondItem="uf7-Oc-0Sf" secondAttribute="bottom" id="9pD-p2-iAu"/>
                 <constraint firstAttribute="bottom" secondItem="6mu-rE-BAn" secondAttribute="bottom" constant="72" id="Bvh-Yk-iwn"/>
                 <constraint firstAttribute="trailing" secondItem="6mu-rE-BAn" secondAttribute="trailing" constant="1" id="Cgo-W4-K0Q"/>
                 <constraint firstItem="kD5-ku-Ao4" firstAttribute="leading" secondItem="N0G-V2-5R4" secondAttribute="leading" id="MiS-hn-jpd"/>
+                <constraint firstItem="uf7-Oc-0Sf" firstAttribute="top" secondItem="N0G-V2-5R4" secondAttribute="top" id="OtG-ZZ-e52"/>
+                <constraint firstAttribute="trailing" secondItem="uf7-Oc-0Sf" secondAttribute="trailing" id="Smi-RQ-E9f"/>
                 <constraint firstItem="6mu-rE-BAn" firstAttribute="top" secondItem="N0G-V2-5R4" secondAttribute="top" constant="1" id="a6D-u8-gPP"/>
+                <constraint firstItem="uf7-Oc-0Sf" firstAttribute="leading" secondItem="N0G-V2-5R4" secondAttribute="leading" id="snt-Do-PFi"/>
                 <constraint firstItem="6mu-rE-BAn" firstAttribute="leading" secondItem="N0G-V2-5R4" secondAttribute="leading" constant="77" id="xgd-oL-LXp"/>
             </constraints>
             <size key="customSize" width="103" height="97"/>
